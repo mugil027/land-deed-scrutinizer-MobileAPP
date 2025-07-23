@@ -41,6 +41,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_native_splash: ^2.4.6
+  video_player: ^2.10.0
 
 
 dev_dependencies:
@@ -68,7 +69,7 @@ flutter:
   assets:
     - assets/images/app_logo1.png
     - assets/images/logo.png
-
+    - assets/videos/background.mp4
 
 
   # To add assets to your application, add an assets section, like this:
