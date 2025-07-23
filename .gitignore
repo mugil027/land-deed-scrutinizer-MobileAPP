@@ -1,0 +1,24 @@
+# ========== Flutter Frontend ==========
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.idea/
+**/.vscode/
+*.iml
+
+# ========== Python Backend ==========
+_pycache_/
+*.py[cod]
+*.sqlite3
+*.log
+.env
+venv/
+.env.*
+*.egg-info/
+
+# ========== General ==========
+.DS_Store
+*.swp
+*.bak
