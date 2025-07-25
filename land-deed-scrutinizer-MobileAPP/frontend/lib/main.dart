@@ -16,6 +16,7 @@ class MyApp extends StatelessWidget {
       ),
       home: HomePage(),
       debugShowCheckedModeBanner: false,
+
     );
   }
 }
@@ -58,6 +59,53 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     super.dispose();
   }
 
+  Widget buildGoldButton(String text, VoidCallback onTap) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      splashColor: Colors.black12,
+      onTap: () async {
+        setState(() {
+          _buttonScale = 0.95;
+        });
+
+        await Future.delayed(Duration(milliseconds: 100));
+
+        setState(() {
+          _buttonScale = 1.0;
+        });
+
+        await Future.delayed(Duration(milliseconds: 100));
+        onTap();
+      },
+      child: AnimatedScale(
+        scale: _buttonScale,
+        duration: Duration(milliseconds: 100),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 210, 174, 109),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 6,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color goldColor = const Color.fromARGB(255, 210, 174, 109);
@@ -91,54 +139,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 ),
               ),
               SizedBox(height: 40),
-              InkWell(
-                borderRadius: BorderRadius.circular(12),
-                splashColor: Colors.black12,
-                onTap: () async {
-                  setState(() {
-                    _buttonScale = 0.95;
-                  });
 
-                  await Future.delayed(Duration(milliseconds: 100));
-
-                  setState(() {
-                    _buttonScale = 1.0;
-                  });
-
-                  await Future.delayed(Duration(milliseconds: 100));
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => ExtractPage()),
-                  );
-                },
-                child: AnimatedScale(
-                  scale: _buttonScale,
-                  duration: Duration(milliseconds: 100),
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: goldColor,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 6,
-                          offset: Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      "Start Extraction",
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              // Button 1: Start Extraction
+              buildGoldButton("Start Extraction", () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ExtractPage()),
+                );
+              }),
             ],
           ),
         ),
