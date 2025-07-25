@@ -29,6 +29,8 @@ def extract_deed_info(cleaned_text):
     prompt = f"""
 You are a legal assistant. Extract the following information from this Indian land deed text and give the output as a JSON object:
 
+Step 1: Carefully read the uploaded document.
+Step 2: If the document is a **land deed** (e.g., Sale Deed, Gift Deed, Mortgage Deed, Partition Deed, or Release Deed), extract the following details 
 - Deed Type
 - Party 1 (Seller/Vendor/Lessor/Donor)
 - Party 2 (Buyer/Purchaser/Lessee/Donee)
@@ -37,7 +39,7 @@ You are a legal assistant. Extract the following information from this Indian la
 - Date of Execution
 - Registration Number
 
-Return only the extracted data in **strict valid JSON** like this:
+and Return only the extracted data in **strict valid JSON** like this:
 {{
   "Deed Type": "...",
   "Party 1": "...",
@@ -54,6 +56,12 @@ Instructions:
 - Make sure all keys and string values are enclosed in double quotes
 - Format it as plain JSON (no comments, no extra text)
 - replace party 1 and party 2 as seller or vendor or lessor or .... and buyer or purchaser or lessee or.. according to the deed
+
+Step 3: If the document is not a land deed, do NOT return the above fields. Instead:
+
+Identify what type of document it is (e.g., resume, invoice, Aadhaar card, medical report, etc.).
+Provide a short and clear summary explaining what the document is about.
+If possible, extract key information like the person's name (in case of resume or ID), company name (in case of invoice), subject (in case of question paper), etc. and make sure you return output in json format only
 Text:
 {cleaned_text}
 """
