@@ -59,7 +59,7 @@ Step 2: If the document is a **land deed** (e.g., Sale Deed, Gift Deed, Mortgage
 - Location
 - Date of Execution
 - Registration Number
-
+the Registration Number will be like "TVR-1-1234-2024-25" in this format
 and Return only the extracted data in **strict valid JSON** like this:
 {{
   "Deed Type": "...",

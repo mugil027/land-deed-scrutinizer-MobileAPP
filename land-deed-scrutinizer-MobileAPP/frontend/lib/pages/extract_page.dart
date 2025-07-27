@@ -193,7 +193,7 @@ class _ExtractPageState extends State<ExtractPage> {
       String regNo = details["Registration Number"] ?? "...";
 
       String summaryText =
-          "This $deedType deed dated $date executed by $party1 in favor of $party2 in respect of Sy. No. $survey ($location) and the same is registered in the office of the Sub-Registrar, $location in Book-1 as Doc. No. $regNo.";
+          "This $deedType dated $date executed by $party1 in favor of $party2 in respect of Sy. No. $survey ($location) and the same is registered in the office of the Sub-Registrar as Doc. No. $regNo.";
 
       Widget summaryWidget = Text.rich(
         TextSpan(
@@ -212,7 +212,7 @@ class _ExtractPageState extends State<ExtractPage> {
             TextSpan(text: location, style: const TextStyle(fontWeight: FontWeight.bold)),
             const TextSpan(text: ") and the same is registered in the office of the Sub-Registrar, "),
             TextSpan(text: location, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const TextSpan(text: " in Book-1 as Doc. No. "),
+            const TextSpan(text: " as Doc. No. "),
             TextSpan(text: regNo, style: const TextStyle(fontWeight: FontWeight.bold)),
             const TextSpan(text: "."),
           ],
