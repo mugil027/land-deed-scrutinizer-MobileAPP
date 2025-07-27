@@ -11,7 +11,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
-
+import 'dart:convert'; 
 import '../services/extract_service.dart';
 import 'scan_page.dart';
 
@@ -45,9 +45,11 @@ class _ExtractPageState extends State<ExtractPage> {
   }
 
   Future<void> requestPermissions() async {
+    // Request storage and camera permissions upfront
     await [
       Permission.storage,
-      Permission.manageExternalStorage,
+      Permission.camera, // Added camera permission
+      Permission.manageExternalStorage, // For saving PDFs to Downloads on Android
     ].request();
   }
 
@@ -57,21 +59,30 @@ class _ExtractPageState extends State<ExtractPage> {
     super.dispose();
   }
 
+  // Allows user to pick a PDF file
   Future<void> pickPDF() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    FilePickerResult? picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
     );
-    if (result != null && result.files.single.path != null) {
+    if (picked != null && picked.files.single.path != null) {
       setState(() {
-        selectedFile = File(result.files.single.path!);
-        this.result = null;
+        selectedFile = File(picked.files.single.path!);
+        result = null; // Clear previous results
       });
+      // Optionally, automatically extract after picking
+      // extractData();
     }
   }
 
+  // Sends the selected PDF to the backend for extraction
   Future<void> extractData() async {
-    if (selectedFile == null) return;
+    if (selectedFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please pick a PDF file first.")),
+      );
+      return;
+    }
 
     setState(() => isLoading = true);
     try {
@@ -79,72 +90,48 @@ class _ExtractPageState extends State<ExtractPage> {
       setState(() => result = response);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to extract: $e")),
+        SnackBar(content: Text("Failed to extract: ${e.toString()}")),
       );
     } finally {
       setState(() => isLoading = false);
     }
   }
 
-  Future<void> scanAndSaveAsPdf() async {
-    final status = await Permission.storage.request();
-    if (!status.isGranted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Storage permission is required.")),
-      );
-      return;
+  // Scans a document using the camera and converts it to PDF, then extracts
+  Future<void> scanAndExtract() async {
+    // Check camera permission
+    var cameraStatus = await Permission.camera.status;
+    if (!cameraStatus.isGranted) {
+      cameraStatus = await Permission.camera.request();
+      if (!cameraStatus.isGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Camera permission is required to scan documents.")),
+        );
+        return;
+      }
     }
 
-    final pickedImage = await ImagePicker().pickImage(source: ImageSource.camera);
-    if (pickedImage == null) return;
-
-    final imageFile = File(pickedImage.path);
-    final pdf = pw.Document();
-    final image = pw.MemoryImage(imageFile.readAsBytesSync());
-
-    pdf.addPage(pw.Page(
-      build: (pw.Context context) => pw.Center(child: pw.Image(image)),
-    ));
-
-    final directory = Directory('/storage/emulated/0/Download');
-    final outputPath = '${directory.path}/scanned_${DateTime.now().millisecondsSinceEpoch}.pdf';
-    final pdfFile = File(outputPath);
-    await pdfFile.writeAsBytes(await pdf.save());
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("📄 PDF saved to: $outputPath")),
+    // Navigate to ScanPage and wait for a result (the PDF file)
+    final File? scannedPdf = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ScanPage()),
     );
-  }
 
-  Future<void> uploadPdfAndExtract(File pdfFile) async {
-    setState(() {
-      isLoading = true;
-      result = null;
-    });
-
-    try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('http://10.214.71.163:8000/extract'),
-      );
-      request.files.add(await http.MultipartFile.fromPath('file', pdfFile.path));
-
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
-
+    if (scannedPdf != null) {
       setState(() {
-        result = ExtractService.parseExtractedDetails(responseBody);
+        selectedFile = scannedPdf; // Set the scanned PDF as the selected file
+        result = null; // Clear previous results
       });
-    } catch (e) {
-      print("Upload failed: $e");
+      // Automatically proceed to extraction after a successful scan
+      extractData();
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Extraction failed: $e")),
+        const SnackBar(content: Text("Scan cancelled or failed.")),
       );
-    } finally {
-      setState(() => isLoading = false);
     }
   }
 
+  // UI for showing loading indicator or file selection message
   Widget buildStatusMessage() {
     if (isLoading) {
       return const Padding(
@@ -155,132 +142,252 @@ class _ExtractPageState extends State<ExtractPage> {
       return Padding(
         padding: const EdgeInsets.all(12),
         child: Text(
-          "📄 PDF uploaded: ${selectedFile!.path.split('/').last}, click on Extract Details to proceed",
+          "📄 PDF uploaded: ${selectedFile!.path.split('/').last}, click 'Extract Details' to proceed.",
           style: GoogleFonts.poppins(fontSize: 14),
+          textAlign: TextAlign.center,
+        ),
+      );
+    } else if (selectedFile == null && result == null) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          "Pick a PDF or scan a document to get started!",
+          style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade700),
+          textAlign: TextAlign.center,
         ),
       );
     }
     return const SizedBox.shrink();
   }
 
+  // Renders the extracted data, differentiating between deed and non-deed documents
   Widget buildExtractedData() {
     final details = result?['Details'];
-    if (details == null) return const Text("No details extracted.");
+    if (details == null || details.isEmpty) {
+      return Card(
+        margin: const EdgeInsets.all(20),
+        elevation: 10,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        color: Colors.white.withOpacity(0.9),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text("No details extracted or invalid response format.",
+              style: GoogleFonts.poppins(fontSize: 16, color: Colors.red.shade700)),
+        ),
+      );
+    }
 
-    String party1 = details["Party 1"] ?? "Party 1";
-    String party2 = details["Party 2"] ?? "Party 2";
-    String deedType = details["Deed Type"] ?? "...";
-    String date = details["Date of Execution"] ?? "...";
-    String survey = details["Survey Number"] ?? "...";
-    String location = details["Location"] ?? "...";
-    String regNo = details["Registration Number"] ?? "...";
+    // Check if it's a land deed by looking for typical deed fields
+    bool isLandDeed = details.containsKey("Deed Type") &&
+        details.containsKey("Party 1") &&
+        details.containsKey("Survey Number");
 
-    String summaryText =
-        "This $deedType deed dated $date executed by $party1 in favor of $party2 in respect of Sy. No. $survey ($location) and the same is registered in the office of the Sub-Registrar, $location in Book-1 as Doc. No. $regNo.";
+    if (isLandDeed) {
+      // Logic for displaying Land Deed details
+      String party1 = details["Party 1"] ?? "Party 1";
+      String party2 = details["Party 2"] ?? "Party 2";
+      String deedType = details["Deed Type"] ?? "...";
+      String date = details["Date of Execution"] ?? "...";
+      String survey = details["Survey Number"] ?? "...";
+      String location = details["Location"] ?? "...";
+      String regNo = details["Registration Number"] ?? "...";
 
-    Widget summaryWidget = Text.rich(
-      TextSpan(
-        children: [
-          const TextSpan(text: "This "),
-          TextSpan(text: deedType, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const TextSpan(text: " deed dated "),
-          TextSpan(text: date, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const TextSpan(text: " executed by "),
-          TextSpan(text: party1, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const TextSpan(text: " in favor of "),
-          TextSpan(text: party2, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const TextSpan(text: " in respect of Sy. No. "),
-          TextSpan(text: survey, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const TextSpan(text: " ("),
-          TextSpan(text: location, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const TextSpan(text: ") and the same is registered in the office of the Sub-Registrar, "),
-          TextSpan(text: location, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const TextSpan(text: " in Book-1 as Doc. No. "),
-          TextSpan(text: regNo, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const TextSpan(text: "."),
-        ],
-      ),
-      style: GoogleFonts.poppins(fontSize: 14, height: 1.5, color: Colors.black87),
-    );
+      String summaryText =
+          "This $deedType deed dated $date executed by $party1 in favor of $party2 in respect of Sy. No. $survey ($location) and the same is registered in the office of the Sub-Registrar, $location in Book-1 as Doc. No. $regNo.";
 
-    return Card(
-      margin: const EdgeInsets.all(20),
-      elevation: 10,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      color: Colors.white.withOpacity(0.9),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      Widget summaryWidget = Text.rich(
+        TextSpan(
           children: [
-            Text("Extracted Details",
-                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 16),
-            Table(
-              columnWidths: const {
-                0: IntrinsicColumnWidth(),
-                1: FlexColumnWidth(),
-              },
-              children: details.entries.map<TableRow>((entry) {
-                return TableRow(children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text("${entry.key}:",
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade800,
-                        )),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(entry.value.toString(),
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w400,
-                          color: Colors.grey.shade900,
-                        )),
-                  ),
-                ]);
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
-            Text("📝 Deed Summary",
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.deepPurple,
-                )),
-            const SizedBox(height: 10),
-            summaryWidget.animate().fade(duration: 500.ms).slideY(begin: 0.2),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                IconButton(
-                  tooltip: "Copy Summary",
-                  icon: const Icon(Icons.copy),
-                  onPressed: () {
-                    FlutterClipboard.copy(summaryText).then((_) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Summary copied to clipboard")),
-                      );
-                    });
-                  },
-                ),
-                IconButton(
-                  tooltip: "Share Summary",
-                  icon: const Icon(Icons.share),
-                  onPressed: () {
-                    Share.share(summaryText);
-                  },
-                ),
-              ],
-            ),
+            const TextSpan(text: "This "),
+            TextSpan(text: deedType, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const TextSpan(text: " deed dated "),
+            TextSpan(text: date, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const TextSpan(text: " executed by "),
+            TextSpan(text: party1, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const TextSpan(text: " in favor of "),
+            TextSpan(text: party2, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const TextSpan(text: " in respect of Sy. No. "),
+            TextSpan(text: survey, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const TextSpan(text: " ("),
+            TextSpan(text: location, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const TextSpan(text: ") and the same is registered in the office of the Sub-Registrar, "),
+            TextSpan(text: location, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const TextSpan(text: " in Book-1 as Doc. No. "),
+            TextSpan(text: regNo, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const TextSpan(text: "."),
           ],
         ),
-      ),
-    );
+        style: GoogleFonts.poppins(fontSize: 14, height: 1.5, color: Colors.black87),
+      );
+
+      return Card(
+        margin: const EdgeInsets.all(20),
+        elevation: 10,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        color: Colors.white.withOpacity(0.9),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Extracted Land Deed Details",
+                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              Table(
+                columnWidths: const {
+                  0: IntrinsicColumnWidth(),
+                  1: FlexColumnWidth(),
+                },
+                children: details.entries.map<TableRow>((entry) {
+                  return TableRow(children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text("${entry.key}:",
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade800,
+                          )),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(entry.value.toString(),
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w400,
+                            color: Colors.grey.shade900,
+                          )),
+                    ),
+                  ]);
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+              Text("📝 Deed Summary",
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.deepPurple,
+                  )),
+              const SizedBox(height: 10),
+              summaryWidget.animate().fade(duration: 500.ms).slideY(begin: 0.2),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    tooltip: "Copy Summary",
+                    icon: const Icon(Icons.copy),
+                    onPressed: () {
+                      FlutterClipboard.copy(summaryText).then((_) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Summary copied to clipboard")),
+                        );
+                      });
+                    },
+                  ),
+                  IconButton(
+                    tooltip: "Share Summary",
+                    icon: const Icon(Icons.share),
+                    onPressed: () {
+                      Share.share(summaryText);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      // Logic for displaying Non-Deed Document details
+      String documentType = details["Document Type"] ?? "Unknown Document";
+      String summary = details["Summary"] ?? "No summary available.";
+      Map<String, dynamic> keyInfo = {};
+      if (details.containsKey("Key Information") && details["Key Information"] is Map) {
+        keyInfo = details["Key Information"];
+      }
+
+      return Card(
+        margin: const EdgeInsets.all(20),
+        elevation: 10,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        color: Colors.white.withOpacity(0.9),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Document Type: $documentType",
+                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              Text("Summary:",
+                  style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Text(summary,
+                  style: GoogleFonts.poppins(fontSize: 14, height: 1.5, color: Colors.black87)),
+              if (keyInfo.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Text("Key Information:",
+                    style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                Table(
+                  columnWidths: const {
+                    0: IntrinsicColumnWidth(),
+                    1: FlexColumnWidth(),
+                  },
+                  children: keyInfo.entries.map<TableRow>((entry) {
+                    return TableRow(children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text("${entry.key}:",
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade800,
+                            )),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(entry.value.toString(),
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w400,
+                              color: Colors.grey.shade900,
+                            )),
+                      ),
+                    ]);
+                  }).toList(),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    tooltip: "Copy Details",
+                    icon: const Icon(Icons.copy),
+                    onPressed: () {
+                      // Simple way to copy all details as JSON string
+                      FlutterClipboard.copy(jsonEncode(details)).then((_) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Details copied to clipboard")),
+                        );
+                      });
+                    },
+                  ),
+                  IconButton(
+                    tooltip: "Share Details",
+                    icon: const Icon(Icons.share),
+                    onPressed: () {
+                      Share.share(jsonEncode(details));
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
+  // Common button style
   ButtonStyle getButtonStyle() {
     return ElevatedButton.styleFrom(
       backgroundColor: const Color.fromARGB(255, 210, 174, 109),
@@ -335,10 +442,11 @@ class _ExtractPageState extends State<ExtractPage> {
                     style: getButtonStyle(),
                   ),
                   const SizedBox(height: 12),
+                  // Changed button to call scanAndExtract
                   ElevatedButton.icon(
-                    onPressed: scanAndSaveAsPdf,
+                    onPressed: scanAndExtract,
                     icon: const Icon(Icons.camera_alt_outlined),
-                    label: Text("Scan & Save as PDF", style: GoogleFonts.poppins()),
+                    label: Text("Scan & Extract", style: GoogleFonts.poppins()), // Changed label
                     style: getButtonStyle(),
                   ),
                   const SizedBox(height: 30),

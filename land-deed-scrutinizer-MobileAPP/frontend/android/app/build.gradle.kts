@@ -21,10 +21,11 @@ android {
 
     defaultConfig {
         applicationId = "com.example.frontend"
-        minSdk = flutter.minSdkVersion
+        minSdk = 21 // Ensure minSdkVersion is at least 21 for image_cropper
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true // Enable multidex for larger apps/plugins
     }
 
     buildTypes {
@@ -37,4 +38,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Corrected dependency syntax for Kotlin DSL
+    implementation("androidx.multidex:multidex:2.0.1")
 }
