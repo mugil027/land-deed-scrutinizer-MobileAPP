@@ -6,7 +6,7 @@ class ExtractService {
   // ✅ Make the base URL configurable.
   // In a real app, you might use a package like flutter_dotenv or build flavors
   // for different environments (dev, staging, prod).
-  static const String _baseUrl = "http://192.168.0.105:8000"; // <-- REMINDER: Update IP if needed for your specific network!
+  static const String _baseUrl = "http://10.28.3.238:8000"; // <-- REMINDER: Update IP if needed for your specific network!
 
   static Future<Map<String, dynamic>> uploadPDF(File file) async {
     var uri = Uri.parse("$_baseUrl/extract");
