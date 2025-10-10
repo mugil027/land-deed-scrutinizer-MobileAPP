@@ -17,4 +17,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 10000
 
 # ---------- Start the FastAPI App ----------
-CMD gunicorn "app:create_app()" --workers 1 --timeout 120 -b 0.0.0.0:10000
+CMD uvicorn app:create_app --host 0.0.0.0 --port 10000
