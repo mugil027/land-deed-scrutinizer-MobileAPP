@@ -7,6 +7,10 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import json
 import re
+import pytesseract, platform
+
+
+
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")
@@ -14,7 +18,10 @@ client = OpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.co
 # --- ADD THIS LINE IF TESSERACT IS NOT IN YOUR SYSTEM PATH ---
 # On Windows, replace 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe' with your actual installation path
 # On Linux/macOS, it's usually just 'tesseract' if installed via package manager
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe' # <--- IMPORTANT: Adjust this path!
+if platform.system() == "Windows":
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+else:
+    pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 # -------------------------------------------------------------
 
 def extract_text(file):
